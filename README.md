@@ -7,7 +7,9 @@
 [![日本語](https://img.shields.io/badge/日本語-Japanese-green)](#garmin-connect-アクティビティダウンロードと-coros-同期ツール)
 
 > **注意：英文和日语版本内容由AI生成，可能存在翻译误差，请以中文版本为准。**
+> 
 > **Note: English and Japanese versions are AI-generated and may contain translation errors. Please refer to the Chinese version for accuracy.**
+> 
 > **注意：英語版と日本語版はAIによって生成されており、翻訳エラーが含まれている可能性があります。正確性については、中国語版を参照してください。**
 
 一个强大的工具，用于从 Garmin Connect 下载活动数据并自动同步到 Coros 平台，实现跨平台运动数据管理。
