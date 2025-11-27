@@ -76,7 +76,7 @@ pip install -r requirements.txt
    **白名单使用方法：**
    1. 当您已经手动将某个Garmin活动上传到Coros，或者希望跳过特定活动的自动同步时使用
    2. 格式必须严格遵守：Garmin活动文件名 + 空格 + Coros活动ID
-   3. 可以通过分析报告（`analysis_results/sync_report.txt`）获取已同步活动的对应关系
+   3. 可以通过分析报告（`reports/sync_report.txt`）获取已同步活动的对应关系
    4. 白名单中的活动对将在同步过程中被自动跳过，避免重复上传
    5. 注释行以#开头，不会被程序解析
 
@@ -143,7 +143,7 @@ python garmin_download.py
 python analyze_activity_files.py
 ```
 
-分析结果将保存在 `analysis_results` 目录下。
+分析结果将保存在 `reports` 目录下。
 
 ## 注意事项
 
@@ -172,7 +172,7 @@ python analyze_activity_files.py
 - `analyze_activity_files.py`: 活动文件分析工具
 - `config/`: 配置文件目录
 - `downloads/`: 下载的活动文件目录
-- `analysis_results/`: 分析结果目录
+- `reports/`: 分析结果目录
 
 ## 更新日志
 
@@ -258,7 +258,7 @@ Main dependency packages include:
    **How to use the whitelist:**
    1. Use when you have manually uploaded a Garmin activity to Coros, or when you want to skip automatic sync for specific activities
    2. The format must be strictly followed: Garmin activity filename + space + Coros activity ID
-   3. You can obtain the correspondence of synced activities through the analysis report (`analysis_results/sync_report.txt`)
+   3. You can obtain the correspondence of synced activities through the analysis report (`reports/sync_report.txt`)
    4. Activity pairs in the whitelist will be automatically skipped during the sync process to avoid duplicate uploads
    5. Comment lines start with # and will not be parsed by the program
 
@@ -325,7 +325,7 @@ Analyze downloaded activity files:
 python analyze_activity_files.py
 ```
 
-Analysis results will be saved in the `analysis_results` directory.
+Analysis results will be saved in the `reports` directory.
 
 ## Notes
 
@@ -354,7 +354,7 @@ Analysis results will be saved in the `analysis_results` directory.
 - `analyze_activity_files.py`: Activity file analysis tool
 - `config/`: Configuration file directory
 - `downloads/`: Downloaded activity file directory
-- `analysis_results/`: Analysis results directory
+- `reports/`: Analysis results directory
 
 ## Changelog
 
@@ -441,7 +441,7 @@ pip install -r requirements.txt
    **ホワイトリストの使用方法：**
    1. 特定のGarminアクティビティをCorosに手動でアップロードした場合、または特定のアクティビティの自動同期をスキップしたい場合に使用します
    2. 形式は厳密に守ってください：Garminアクティビティファイル名 + スペース + CorosアクティビティID
-   3. 分析レポート（`analysis_results/sync_report.txt`）を通じて、同期済みアクティビティの対応関係を取得できます
+   3. 分析レポート（`reports/sync_report.txt`）を通じて、同期済みアクティビティの対応関係を取得できます
    4. ホワイトリスト内のアクティビティペアは同期プロセス中に自動的にスキップされ、重複アップロードが回避されます
    5. コメント行は#で始まり、プログラムによって解析されません
 
@@ -508,7 +508,7 @@ python garmin_download.py
 python analyze_activity_files.py
 ```
 
-分析結果は `analysis_results` ディレクトリに保存されます。
+分析結果は `reports` ディレクトリに保存されます。
 
 ## 注意事項
 
@@ -537,7 +537,7 @@ python analyze_activity_files.py
 - `analyze_activity_files.py`：アクティビティファイル分析ツール
 - `config/`：設定ファイルディレクトリ
 - `downloads/`：ダウンロードしたアクティビティファイルディレクトリ
-- `analysis_results/`：分析結果ディレクトリ
+- `reports/`：分析結果ディレクトリ
 
 ## 更新履歴
 

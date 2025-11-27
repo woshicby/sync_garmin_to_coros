@@ -6,6 +6,18 @@ tokens/*
 config/*
 !.gitkeep
 
+# 忽略downloads/coros/文件夹中的文件但保留文件夹本身
+downloads/coros/*
+!.gitkeep
+
+# 忽略downloads/garmin/文件夹中的文件但保留文件夹本身
+downloads/garmin/*
+!.gitkeep
+
+# 忽略reports文件夹中的文件但保留文件夹本身
+reports/*
+!.gitkeep
+
 # Python虚拟环境
 venv/
 env/

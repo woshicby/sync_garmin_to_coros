@@ -351,7 +351,7 @@ def main():
        - analysis_result.txt: 总体分析报告
     """
     # 创建分析结果文件夹
-    result_folder = "analysis_results"
+    result_folder = "reports"
     if not os.path.exists(result_folder):
         os.makedirs(result_folder)
     

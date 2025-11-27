@@ -109,7 +109,7 @@ def main():
     
     # Step 4: 解析Garmin独有的活动列表文件
     # 从分析结果中获取需要上传的活动列表
-    garmin_only_file = "analysis_results\\garmin_only_activities.txt"  # 分析结果文件路径
+    garmin_only_file = "reports\\garmin_only_activities.txt"  # 分析结果文件路径
     garmin_files_dir = "downloads\\garmin"  # 佳明活动文件存储目录
     activities_to_upload = []  # 初始化待上传活动列表
 
@@ -267,8 +267,8 @@ def main():
     report_lines.append(f"上传失败: {upload_failure_count} 个\n")
     report_lines.append(f"总活动数: {len(activities_to_upload)} 个\n")
     
-    # 生成报告文件，保存到项目根目录
-    report_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sync_report.txt")
+    # 生成报告文件，保存到reports目录
+    report_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports", "sync_report.txt")
     with open(report_file, "w", encoding="utf-8") as f:
         # 写入基本统计信息
         f.write(f"同步时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")

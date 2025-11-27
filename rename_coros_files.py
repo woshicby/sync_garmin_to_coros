@@ -8,7 +8,7 @@ def main():
     analyze_activity_files.main()
 
     # 读取不匹配的活动文件列表
-    mismatched_file = os.path.join("analysis_results", "mismatched_activities.txt")
+    mismatched_file = os.path.join("reports", "mismatched_activities.txt")
     with open(mismatched_file, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
@@ -65,7 +65,7 @@ def main():
     print("\n正在执行修正后的活动文件分析...")
     analyze_activity_files.main()
 
-    print("\n所有操作完成！分析结果已保存到 analysis_results 文件夹中。")
+    print("\n所有操作完成！分析结果已保存到 reports 文件夹中。")
 
 if __name__ == "__main__":
     main()
