@@ -20,6 +20,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(leve
 sport_type_mapping = {
     100: "running",
     101: "treadmill_running",
+    102: "cycling",
     104: "hiking",
     200: "cycling",  # roal_biking也是200
     300: "swimming",
