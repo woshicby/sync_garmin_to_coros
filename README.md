@@ -27,12 +27,13 @@
 
 ### Coros 同步功能
 - 自动登录 Coros 平台
+- 支持多区域配置（国际区、中国区、欧洲区）
 - 智能分析 Garmin 和 Coros 活动，找出 Garmin 独有活动
 - 按日期排序，有序上传活动文件到 Coros
 - 过滤掉特定活动类型（如 walking）
 - 支持白名单配置，手动指定需要跳过的活动对
 - 生成详细的同步报告
-- 支持文件存储服务（阿里云 OSS/AWS S3）
+- 支持多种文件存储服务（阿里云 OSS、AWS S3）
 
 ### 活动分析功能
 - 比较 Garmin 和 Coros 活动数据
@@ -52,35 +53,37 @@ pip install -r requirements.txt
 ```
 
 主要依赖包包括：
-- garminconnect
+- selenium
+- webdriver-manager
 - requests
-- urllib3
-- python-dotenv
-- cryptography
+- beautifulsoup4
+- lxml
 
 ## 配置说明
 
-1. 首次运行前，请确保在 `config` 目录下创建以下配置文件：（如果不用白名单的话，就不用）
+### 区域配置
 
-   此外，您可以创建可选的白名单配置文件：
+本工具支持以下区域配置：
+- **国际区**: 适用于全球大部分地区
+- **中国区**: 适用于中国大陆地区
+- **欧洲区**: 适用于欧洲地区用户
 
-   **config/sync_whitelist.txt** (用于指定需要跳过的活动对):
-   ```
-   # 同步白名单配置文件
-   # 格式：佳明活动完整文件名 高驰活动完整文件名
-   # 每行表示一对需要跳过的活动
-   # 示例：
-   20230711-174102-multi_sport-莆田市复合运动-256118606.fit 20230711-175127-running-461428804292739075.fit
-   ```
-   
-   **白名单使用方法：**
-   1. 当您已经手动将某个Garmin活动上传到Coros，或者希望跳过特定活动的自动同步时使用
-   2. 格式必须严格遵守：Garmin活动文件名 + 空格 + Coros活动ID
-   3. 可以通过分析报告（`reports/sync_report.txt`）获取已同步活动的对应关系
-   4. 白名单中的活动对将在同步过程中被自动跳过，避免重复上传
-   5. 注释行以#开头，不会被程序解析
+不同区域使用不同的API地址和存储服务：
+- 国际区: 使用 AWS S3 存储服务
+- 中国区: 使用阿里云 OSS 存储服务
+- 欧洲区: 使用 AWS S3 存储服务
 
-   主要配置文件:
+### 配置文件
+
+1. 首次运行前，程序会自动创建所需的配置文件和目录结构。
+
+2. 配置文件位置：
+   - `config/garmin_config.json`: Garmin Connect 登录配置
+   - `config/coros_config.json`: Coros 登录配置
+   - `config/oss_config.json`: 文件存储服务配置（可选）
+   - `config/sync_whitelist.txt`: 同步白名单配置（可选）
+
+3. 配置文件格式：
 
    **config/garmin_config.json**:
    ```json
@@ -106,9 +109,22 @@ pip install -r requirements.txt
    }
    ```
 
-2. 密码/凭证存储说明：
+   **config/sync_whitelist.txt** (用于指定需要跳过的活动对):
+   ```
+   # 同步白名单配置文件
+   # 格式：佳明活动完整文件名 高驰活动完整文件名
+   # 每行表示一对需要跳过的活动
+   # 示例：
+   20230711-174102-multi_sport-莆田市复合运动-256118606.fit 20230711-175127-running-461428804292739075.fit
+   
+   # walking类型文件会自动添加到此处
+   20230815-080000-walking-日常步行-123456789.fit
+   ```
+
+4. 密码/凭证存储说明：
    - 密码以 base64 编码形式存储，程序会自动进行解码
    - 出于安全考虑，请勿直接以明文形式保存密码
+   - 首次运行时，程序会提示输入邮箱和密码，并自动加密保存
 
 ## 使用方法
 
@@ -135,7 +151,15 @@ python sync_garmin_to_coros.py
 python garmin_download.py
 ```
 
-### 3. 活动分析
+### 3. Coros 活动下载
+
+单独下载 Coros 活动：
+
+```bash
+python coros_download.py
+```
+
+### 4. 活动分析
 
 分析已下载的活动文件：
 
@@ -158,21 +182,29 @@ python analyze_activity_files.py
 
 ## 技术说明
 
-- 使用 garminconnect 库与 Garmin Connect API 交互
+- 使用 selenium 自动化工具与 Garmin Connect 交互
 - 使用 urllib3 库与 Coros API 交互
 - 使用 requests 库处理 HTTP 请求
-- 支持中国区域的 Garmin Connect 和 Coros 平台
+- 支持多区域的 Garmin Connect 和 Coros 平台
 - 支持多种存储服务：阿里云 OSS 和 AWS S3
 
 ## 文件结构
 
 - `sync_garmin_to_coros.py`: 主程序，实现数据同步功能
 - `garmin_download.py`: Garmin 活动下载功能
+- `coros_download.py`: Coros 活动下载功能
 - `coros_client.py`: Coros API 客户端
+- `oss_client.py`: 文件存储服务客户端
 - `analyze_activity_files.py`: 活动文件分析工具
+- `improved_fit_parser.py`: FIT 文件解析工具
+- `utils.py`: 通用工具函数
 - `config/`: 配置文件目录
 - `downloads/`: 下载的活动文件目录
+  - `downloads/garmin/`: Garmin 活动文件
+  - `downloads/coros/`: Coros 活动文件
 - `reports/`: 分析结果目录
+- `tokens/`: 登录令牌存储目录
+- `activity_samples/`: 活动样本文件目录
 
 ## 更新日志
 
@@ -181,6 +213,8 @@ python analyze_activity_files.py
 - v1.2.0: 添加活动分析和报告生成功能
 - v1.3.0: 优化同步逻辑，添加文件存储支持
 - v1.4.0: 添加活动白名单功能，支持手动指定需要跳过的活动对
+- v1.5.0: 支持多区域配置（国际区、中国区、欧洲区）
+- v1.6.0: 更新依赖库，优化登录流程
 
 ## 许可证
 
@@ -196,7 +230,7 @@ python analyze_activity_files.py
 
 A powerful tool for downloading activity data from Garmin Connect and automatically syncing it to the Coros platform, enabling cross-platform sports data management.
 
-> **Important Note: This tool only supports the Chinese version of Garmin Connect. Please do not use a VPN or proxy when using this tool, as it may cause login failures or prevent normal download of activity data.**
+> **Important Note: This tool now supports multiple regions. Please do not use a VPN or proxy when using the Chinese region version, as it may cause login failures or prevent normal download of activity data.**
 > **The gitignore file is already configured to ignore passwords and credentials, but if you want to upload locally used code to git, please double-check if you have modified it. If so, please update the gitignore file in a timely manner.**
 
 ## Features
@@ -209,12 +243,13 @@ A powerful tool for downloading activity data from Garmin Connect and automatica
 
 ### Coros Sync Function
 - Automatic login to Coros platform
+- Support for multiple regions: International, Chinese, and European regions
 - Intelligent analysis of Garmin and Coros activities to find Garmin-exclusive activities
 - Date-sorted, sequential upload of activity files to Coros
 - Filtering of specific activity types (such as walking)
 - Support for whitelist configuration to manually specify activity pairs to skip
 - Generation of detailed sync reports
-- Support for file storage services (Alibaba Cloud OSS/AWS S3)
+- Support for multiple file storage services (Alibaba Cloud OSS for China region, AWS S3 for International/European regions)
 
 ### Activity Analysis Function
 - Compare Garmin and Coros activity data
@@ -234,15 +269,35 @@ pip install -r requirements.txt
 ```
 
 Main dependency packages include:
-- garminconnect
+- selenium
+- webdriver-manager
 - requests
-- urllib3
-- python-dotenv
-- cryptography
+- beautifulsoup4
+- lxml
 
 ## Configuration Instructions
 
-1. Before running for the first time, please ensure the following configuration files are created in the `config` directory: (not required if you don't use whitelist)
+### Regional Configuration
+
+The tool supports three regions with different API endpoints and storage services:
+
+| Region | Garmin API | Coros API | Storage Service |
+|--------|------------|-----------|----------------|  
+| International | connectapi.garmin.com | teamapi.coros.com | AWS S3 |
+| Chinese | connectapi.garmin.cn | teamapi.coros.com.cn | Alibaba Cloud OSS |
+| European | connectapi.garmin.eu | teamapi.coros.com | AWS S3 |
+
+1. Before running for the first time, the program will automatically create the required directory structure:
+
+   ```
+   .
+   ├── config/              # Configuration files directory
+   ├── downloads/           # Downloaded activity files directory
+   │   ├── coros/          # Coros activity files
+   │   └── garmin/         # Garmin activity files
+   ├── logs/               # Log files directory
+   └── reports/            # Analysis reports directory
+   ```
 
    Additionally, you can create an optional whitelist configuration file:
 
@@ -317,7 +372,15 @@ Download Garmin activities separately:
 python garmin_download.py
 ```
 
-### 3. Activity Analysis
+### 3. Coros Activity Download
+
+Download Coros activities separately:
+
+```bash
+python coros_download.py
+```
+
+### 4. Activity Analysis
 
 Analyze downloaded activity files:
 
@@ -329,7 +392,7 @@ Analysis results will be saved in the `reports` directory.
 
 ## Notes
 
-1. **Important: This tool only supports the Chinese version of Garmin Connect. Please do not use a VPN or proxy when using this tool**
+1. **Important: For the Chinese region version, please do not use a VPN or proxy when using this tool**
 2. On first run, if MFA is enabled, the program will prompt for a verification code
 3. The program will automatically manage login tokens to avoid frequent logins
 4. The sync process will automatically skip activities already existing in Coros
@@ -340,21 +403,29 @@ Analysis results will be saved in the `reports` directory.
 
 ## Technical Notes
 
-- Uses garminconnect library to interact with Garmin Connect API
+- Uses selenium with webdriver-manager to interact with Garmin Connect
 - Uses urllib3 library to interact with Coros API
 - Uses requests library to handle HTTP requests
-- Supports Garmin Connect and Coros platforms in the Chinese region
+- Supports multiple regions: International, Chinese, and European regions
 - Supports multiple storage services: Alibaba Cloud OSS and AWS S3
 
 ## File Structure
 
 - `sync_garmin_to_coros.py`: Main program, implementing data sync functionality
 - `garmin_download.py`: Garmin activity download functionality
+- `coros_download.py`: Coros activity download functionality
 - `coros_client.py`: Coros API client
+- `oss_client.py`: File storage service client
 - `analyze_activity_files.py`: Activity file analysis tool
+- `improved_fit_parser.py`: FIT file parsing tool
+- `utils.py`: General utility functions
 - `config/`: Configuration file directory
 - `downloads/`: Downloaded activity file directory
+  - `downloads/garmin/`: Garmin activity files
+  - `downloads/coros/`: Coros activity files
 - `reports/`: Analysis results directory
+- `tokens/`: Login token storage directory
+- `activity_samples/`: Activity sample files directory
 
 ## Changelog
 
@@ -363,6 +434,8 @@ Analysis results will be saved in the `reports` directory.
 - v1.2.0: Added activity analysis and report generation functionality
 - v1.3.0: Optimized sync logic, added file storage support
 - v1.4.0: Added activity whitelist functionality, supporting manual specification of activity pairs to skip
+- v1.5.0: Added multiple region support (International, Chinese, European)
+- v1.6.0: Added Coros activity download functionality, updated technical implementation using selenium
 
 ## License
 
@@ -378,7 +451,7 @@ When using this tool, please comply with the terms of service of Garmin Connect 
 
 Garmin Connect からアクティビティデータをダウンロードし、自動的に Coros プラットフォームに同期する強力なツールです。クロスプラットフォームのスポーツデータ管理を実現します。
 
-> **重要な注意事項：このツールは中国版 Garmin Connect のみをサポートしています。使用する際には VPN やプロキシを使用しないでください。そうしないと、ログインに失敗したり、アクティビティデータの正常なダウンロードが妨げられたりする可能性があります。**
+> **重要な注意事項：このツールは複数の地域をサポートしています。中国地域版を使用する場合は、VPN やプロキシを使用しないでください。そうしないと、ログインに失敗したり、アクティビティデータの正常なダウンロードが妨げられたりする可能性があります。**
 > **gitignore ファイルはすでにパスワードと認証情報を無視するように設定されていますが、ローカルで使用しているコードを git にアップロードする場合は、変更されていないか再度確認してください。変更されている場合は、gitignore ファイルを適時更新してください。**
 
 ## 機能特性
@@ -391,12 +464,13 @@ Garmin Connect からアクティビティデータをダウンロードし、�
 
 ### Coros 同期機能
 - Coros プラットフォームへの自動ログイン
+- 複数の地域をサポート：国際版、中国版、欧州版
 - Garmin と Coros のアクティビティをインテリジェントに分析し、Garmin 独占のアクティビティを見つける
 - 日付でソートし、順序立ててアクティビティファイルを Coros にアップロード
 - 特定のアクティビティタイプ（walking など）をフィルタリング
 - ホワイトリスト設定をサポートし、スキップするアクティビティペアを手動で指定
 - 詳細な同期レポートの生成
-- ファイルストレージサービス（Alibaba Cloud OSS/AWS S3）をサポート
+- 複数のファイルストレージサービスをサポート：中国地域は Alibaba Cloud OSS、国際/欧州地域は AWS S3
 
 ### アクティビティ分析機能
 - Garmin と Coros のアクティビティデータを比較
@@ -416,17 +490,37 @@ pip install -r requirements.txt
 ```
 
 主な依存パッケージは以下の通りです：
-- garminconnect
+- selenium
+- webdriver-manager
 - requests
-- urllib3
-- python-dotenv
-- cryptography
+- beautifulsoup4
+- lxml
 
 ## 設定の説明
 
-1. 初回実行前に、`config` ディレクトリに以下の設定ファイルが作成されていることを確認してください：（ホワイトリストを使用しない場合は不要）
+### 地域設定
 
-   また、オプションのホワイトリスト設定ファイルを作成することもできます：
+このツールは、異なる API エンドポイントとストレージサービスを持つ 3 つの地域をサポートしています：
+
+| 地域 | Garmin API | Coros API | ストレージサービス |
+|------|------------|-----------|----------------|
+| 国際版 | connectapi.garmin.com | teamapi.coros.com | AWS S3 |
+| 中国版 | connectapi.garmin.cn | teamapi.coros.com.cn | Alibaba Cloud OSS |
+| 欧州版 | connectapi.garmin.eu | teamapi.coros.com | AWS S3 |
+
+1. 初回実行前に、プログラムは必要なディレクトリ構造を自動的に作成します：
+
+   ```
+   .
+   ├── config/              # 設定ファイルディレクトリ
+   ├── downloads/           # ダウンロードしたアクティビティファイルディレクトリ
+   │   ├── coros/          # Coros アクティビティファイル
+   │   └── garmin/         # Garmin アクティビティファイル
+   ├── logs/               # ログファイルディレクトリ
+   └── reports/            # 分析レポートディレクトリ
+   ```
+
+2. オプションのホワイトリスト設定ファイル：
 
    **config/sync_whitelist.txt**（スキップするアクティビティペアを指定するため）：
    ```
@@ -435,7 +529,6 @@ pip install -r requirements.txt
    # 各行はスキップするアクティビティのペアを表します
    # 例：
       20230711-174102-multi_sport-莆田市复合运动-256118606.fit 20230711-175127-running-461428804292739075.fit
-
    ```
    
    **ホワイトリストの使用方法：**
@@ -471,7 +564,7 @@ pip install -r requirements.txt
    }
    ```
 
-2. パスワード/認証情報の保存に関する注意事項：
+3. パスワード/認証情報の保存に関する注意事項：
    - パスワードは base64 エンコード形式で保存され、プログラムによって自動的にデコードされます
    - セキュリティ上の理由から、平文形式でパスワードを保存しないでください
 
@@ -500,7 +593,15 @@ Garmin アクティビティを単独でダウンロード：
 python garmin_download.py
 ```
 
-### 3. アクティビティ分析
+### 3. Coros アクティビティダウンロード
+
+Coros アクティビティを単独でダウンロード：
+
+```bash
+python coros_download.py
+```
+
+### 4. アクティビティ分析
 
 ダウンロードしたアクティビティファイルを分析：
 
@@ -512,7 +613,7 @@ python analyze_activity_files.py
 
 ## 注意事項
 
-1. **重要：このツールは中国版 Garmin Connect のみをサポートしています。使用する際には VPN やプロキシを使用しないでください**
+1. **重要：中国地域版を使用する場合は、VPN やプロキシを使用しないでください**
 2. 初回実行時、MFA が有効になっている場合、プログラムは検証コードの入力を要求します
 3. プログラムは自動的にログイントークンを管理し、頻繁なログインを回避します
 4. 同期プロセス中に、Coros にすでに存在するアクティビティは自動的にスキップされます
@@ -523,21 +624,31 @@ python analyze_activity_files.py
 
 ## 技術的な説明
 
-- garminconnect ライブラリを使用して Garmin Connect API と対話
+- selenium と webdriver-manager を使用して Garmin Connect と対話
 - urllib3 ライブラリを使用して Coros API と対話
 - requests ライブラリを使用して HTTP リクエストを処理
-- 中国地域の Garmin Connect と Coros プラットフォームをサポート
+- 複数の地域をサポート：国際版、中国版、欧州版
 - 複数のストレージサービスをサポート：Alibaba Cloud OSS と AWS S3
+- 整理されたディレクトリ構造で自動的なファイル管理を実装
+- 安全なパスワードストレージのために base64 エンコーディングを使用
 
 ## ファイル構造
 
 - `sync_garmin_to_coros.py`：メインプログラム、データ同期機能を実装
 - `garmin_download.py`：Garmin アクティビティダウンロード機能
+- `coros_download.py`：Coros アクティビティダウンロード機能
 - `coros_client.py`：Coros API クライアント
 - `analyze_activity_files.py`：アクティビティファイル分析ツール
 - `config/`：設定ファイルディレクトリ
+  - `garmin_config.json`：Garmin ログイン設定
+  - `coros_config.json`：Coros ログイン設定
+  - `oss_config.json`：ストレージサービス設定
+  - `sync_whitelist.txt`：同期ホワイトリスト設定
 - `downloads/`：ダウンロードしたアクティビティファイルディレクトリ
-- `reports/`：分析結果ディレクトリ
+  - `garmin/`：Garmin .fit アクティビティファイル
+  - `coros/`：Coros アクティビティファイル
+- `logs/`：ログファイルディレクトリ
+- `reports/`：分析レポートディレクトリ
 
 ## 更新履歴
 
@@ -546,6 +657,8 @@ python analyze_activity_files.py
 - v1.2.0：アクティビティ分析とレポート生成機能を追加
 - v1.3.0：同期ロジックを最適化し、ファイルストレージサポートを追加
 - v1.4.0：アクティビティホワイトリスト機能を追加、スキップするアクティビティペアの手動指定をサポート
+- v1.5.0：複数の地域サポート（国際版、中国版、欧州版）を追加
+- v1.6.0：Coros アクティビティダウンロード機能を追加、selenium を使用した技術実装を更新
 
 ## ライセンス
 
