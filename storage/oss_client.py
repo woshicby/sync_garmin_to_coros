@@ -1,52 +1,25 @@
-import base64
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+OSS 存储客户端
+
+提供阿里云 OSS 和 AWS S3 的文件上传功能。
+"""
+
+import os
 import json
 import urllib3
-import certifi
-import os
 import hashlib
-import struct
+import certifi
+import base64
 
-# 从配置文件加载配置
-def load_config(config_file):
-    if os.path.exists(config_file):
-        with open(config_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {}
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 解码Coros OSS凭证
-def decode_credentials(encoded_str):
-    """解码Coros返回的OSS凭证字符串
-    
-    Args:
-        encoded_str: 编码后的凭证字符串
-        
-    Returns:
-        dict: 解码后的凭证字典
-    """
-    try:
-        # 移除可能的前缀
-        if encoded_str.startswith('oss,'):
-            encoded_str = encoded_str[4:]
-        
-        # Base64解码
-        decoded_bytes = base64.b64decode(encoded_str)
-        
-        # 转换为字符串并解析JSON
-        decoded_str = decoded_bytes.decode('utf-8')
-        return json.loads(decoded_str)
-        
-    except Exception as e:
-        print(f"解码凭证失败: {str(e)}")
-        # 如果解码失败，尝试另一种解码方式
-        try:
-            # 尝试直接解析（如果已经是JSON格式）
-            return json.loads(encoded_str)
-        except:
-            # 返回空字典
-            return {}
+from config import OSS_APP_ID, OSS_SIGN, OSS_SALT
 
-# 计算文件的MD5值
-def calculate_file_md5(file_path):
+
+def calculate_md5_file(file_path):
     """计算文件的MD5值
     
     Args:
@@ -62,22 +35,36 @@ def calculate_file_md5(file_path):
     return md5_hash.hexdigest()
 
 
-def decode_oss_credentials(credient):
-    salt = "9y78gpoERW4lBNYL"  # 盐值
+def decode_oss_credentials(credential):
+    """解码OSS凭证
     
-    # 第一步：去除盐（salt）部分
-    encode_credient = credient.replace(salt, '')
-    
-    # 第二步：Base64 解码
-    credients = base64.b64decode(encode_credient).decode('utf-8')  # 解码后的内容转成 utf-8 字符串
-    
-    return json.loads(credients)
+    Args:
+        credential: 编码后的凭证字符串
+        
+    Returns:
+        dict: 解码后的凭证字典
+    """
+    encode_credential = credential.replace(OSS_SALT, '')
+    credentials = base64.b64decode(encode_credential).decode('utf-8')
+    return json.loads(credentials)
 
 
 def get_oss_sts_token(bucket, service, app_id, sign, v=2, access_token=None):
+    """获取OSS STS Token
+    
+    Args:
+        bucket: 存储桶名称
+        service: 服务类型 (aliyun/aws)
+        app_id: 应用ID
+        sign: 签名
+        v: 版本号
+        access_token: 访问令牌
+        
+    Returns:
+        dict: STS凭证
+    """
     sts_token_url = f"https://faq.coros.com/openapi/oss/sts?bucket={bucket}&service={service}&app_id={app_id}&sign={sign}&v={v}"
     
-    # 设置请求头，包括访问令牌
     headers = {}
     if access_token:
         headers['accesstoken'] = access_token
@@ -94,6 +81,8 @@ def get_oss_sts_token(bucket, service, app_id, sign, v=2, access_token=None):
 
 
 class OssClient:
+    """OSS客户端基类"""
+    
     def __init__(self, bucket, service, app_id, sign, v=2, access_token=None):
         self.bucket = bucket
         self.service = service
@@ -107,8 +96,8 @@ class OssClient:
     def init_client(self):
         raise NotImplementedError("init_client方法必须被子类实现")
     
-    def upload_file(self, file_path, file_name):
-        raise NotImplementedError("upload_file方法必须被子类实现")
+    def multipart_upload(self, file_path, file_name):
+        raise NotImplementedError("multipart_upload方法必须被子类实现")
 
 
 try:
@@ -117,22 +106,33 @@ try:
     from oss2.models import PartInfo
     
     class AliOssClient(OssClient):
-        def __init__(self, bucket="coros-oss", service="aliyun", app_id="1660188068672619112", sign="9AD4AA35AAFEE6BB1E847A76848D58DF", v=2, access_token=None):
+        """阿里云OSS客户端"""
+        
+        def __init__(self, bucket="coros-oss", service="aliyun", app_id=None, sign=None, v=2, access_token=None):
+            app_id = app_id or OSS_APP_ID
+            sign = sign or OSS_SIGN['aliyun']
             super().__init__(bucket, service, app_id, sign, v, access_token)
             self.init_client()
         
         def init_client(self):
-            self.credentials = get_oss_sts_token(self.bucket, self.service, self.app_id, self.sign, self.v, self.access_token)
-            auth = oss2.StsAuth(self.credentials["AccessKeyId"], self.credentials["AccessKeySecret"], self.credentials["SecurityToken"])
+            self.credentials = get_oss_sts_token(
+                self.bucket, self.service, self.app_id, self.sign, self.v, self.access_token
+            )
+            auth = oss2.StsAuth(
+                self.credentials["AccessKeyId"],
+                self.credentials["AccessKeySecret"],
+                self.credentials["SecurityToken"]
+            )
             self.client = oss2.Bucket(auth, "https://oss-cn-beijing.aliyuncs.com", self.bucket)
         
-        def upload_file(self, file_path, file_name):
+        def multipart_upload(self, file_path, file_name):
+            """分片上传文件"""
             key = f"fit_zip/{file_name}"
-            init_multipart_upload_result = self.client.init_multipart_upload(key)
-            if init_multipart_upload_result.status != 200:
+            init_result = self.client.init_multipart_upload(key)
+            if init_result.status != 200:
                 raise Exception("初始化阿里云分片上传异常")
             
-            upload_id = init_multipart_upload_result.upload_id
+            upload_id = init_result.upload_id
             total_size = os.path.getsize(file_path)
             part_size = determine_part_size(total_size, preferred_size=1024 * 1024)
             parts = []
@@ -142,15 +142,17 @@ try:
                 offset = 0
                 while offset < total_size:
                     num_to_upload = min(part_size, total_size - offset)
-                    result = self.client.upload_part(key, upload_id, part_number, SizedFileAdapter(fileobj, num_to_upload))
+                    result = self.client.upload_part(
+                        key, upload_id, part_number, SizedFileAdapter(fileobj, num_to_upload)
+                    )
                     parts.append(PartInfo(part_number, result.etag))
                     offset += num_to_upload
                     part_number += 1
             
-            r = self.client.complete_multipart_upload(key, upload_id, parts)
+            self.client.complete_multipart_upload(key, upload_id, parts)
             return key
+
 except ImportError:
-    # 如果没有安装oss2库，就跳过阿里云OSS客户端的实现
     pass
 
 
@@ -159,12 +161,18 @@ try:
     from boto3.s3.transfer import TransferConfig
     
     class AwsOssClient(OssClient):
-        def __init__(self, bucket="eu-coros", service="aws", app_id="1660188068672619112", sign="877571111A1EE5316E4B590103D4B5B3", v=2, access_token=None):
+        """AWS S3客户端"""
+        
+        def __init__(self, bucket="eu-coros", service="aws", app_id=None, sign=None, v=2, access_token=None):
+            app_id = app_id or OSS_APP_ID
+            sign = sign or OSS_SIGN['aws']
             super().__init__(bucket, service, app_id, sign, v, access_token)
             self.init_client()
         
         def init_client(self):
-            self.credentials = get_oss_sts_token(self.bucket, self.service, self.app_id, self.sign, self.v, self.access_token)
+            self.credentials = get_oss_sts_token(
+                self.bucket, self.service, self.app_id, self.sign, self.v, self.access_token
+            )
             self.client = boto3.client(
                 "s3",
                 aws_access_key_id=self.credentials["AccessKeyId"],
@@ -173,12 +181,13 @@ try:
                 endpoint_url='https://s3.eu-central-1.amazonaws.com',
             )
         
-        def upload_file(self, file_path, file_name):
+        def multipart_upload(self, file_path, file_name):
+            """分片上传文件"""
             config = TransferConfig(
-                multipart_threshold=1024 * 1024 * 5,  # 分片上传的阈值（5MB）
-                max_concurrency=4,                   # 并发数
-                multipart_chunksize=1024 * 1024 * 5,  # 分片大小（5MB）
-                use_threads=True                     # 使用多线程
+                multipart_threshold=1024 * 1024 * 5,
+                max_concurrency=4,
+                multipart_chunksize=1024 * 1024 * 5,
+                use_threads=True
             )
             
             self.client.upload_file(
@@ -188,26 +197,25 @@ try:
                 Config=config
             )
             return f"fit_zip/{file_name}"
+
 except ImportError:
-    # 如果没有安装boto3库，就跳过AWS OSS客户端的实现
     pass
 
 
 def get_oss_client(bucket, service, app_id=None, sign=None, v=2, access_token=None):
-    # 获取OSS配置和参数
-    config_file_path = os.path.join(os.path.dirname(__file__), "config", "oss_config.json")
-    if not os.path.exists(config_file_path):
-        raise Exception("未找到OSS配置文件")
-
-    with open(config_file_path, 'r') as f:
-        oss_config = json.load(f)
-
-    # 使用配置文件中的app_id和sign作为默认值，如果参数中提供了则覆盖
-    if app_id is None:
-        app_id = oss_config.get("appId", "")
-    if sign is None:
-        sign = oss_config.get("sign", "")
-
+    """获取OSS客户端实例
+    
+    Args:
+        bucket: 存储桶名称
+        service: 服务类型 (aliyun/aws)
+        app_id: 应用ID
+        sign: 签名
+        v: 版本号
+        access_token: 访问令牌
+        
+    Returns:
+        OssClient: OSS客户端实例
+    """
     if service == "aliyun":
         try:
             return AliOssClient(bucket, service, app_id=app_id, sign=sign, v=v, access_token=access_token)
@@ -217,6 +225,6 @@ def get_oss_client(bucket, service, app_id=None, sign=None, v=2, access_token=No
         try:
             return AwsOssClient(bucket, service, app_id=app_id, sign=sign, v=v, access_token=access_token)
         except NameError:
-            raise Exception("未安装boto3库，无法使用AWS OSS客户端")
+            raise Exception("未安装boto3库，无法使用AWS S3客户端")
     else:
         raise Exception(f"不支持的OSS服务类型: {service}")

@@ -1,5 +1,6 @@
-selenium
-webdriver-manager
+garminconnect>=0.2.19
+urllib3
+certifi
 requests
-beautifulsoup4
-lxml
+oss2
+boto3
