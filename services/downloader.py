@@ -107,6 +107,7 @@ def _login_garmin():
 
 def _download_all_garmin_fit_files(client, download_folder):
     """下载所有 Garmin FIT 文件"""
+    from garminconnect import Garmin
     try:
         print("开始获取所有活动...")
         activities = []

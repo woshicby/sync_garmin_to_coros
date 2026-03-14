@@ -141,7 +141,7 @@ def _upload_activities(coros_client, activities_to_upload):
                 zip_size = os.path.getsize(temp_zip_path)
                 file_md5 = calculate_md5_file(temp_zip_path)
 
-                oss_client = get_oss_client(bucket, service, region_id, coros_client.access_token)
+                oss_client = get_oss_client(bucket, service, access_token=coros_client.access_token)
                 
                 zip_filename = f"{user_id}/{file_md5}.zip"
                 
