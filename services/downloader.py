@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DIRS, SPORT_TYPE_MAPPING, CONFIG_FILES
 from config_manager import get_garmin_config
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 def get_activity_type(sport_type):
@@ -30,7 +30,11 @@ def get_activity_type(sport_type):
 
 
 def download_garmin_activities():
-    """下载 Garmin 活动文件"""
+    """下载 Garmin 活动文件
+    
+    注意：不使用client.logout()主动登出，因为garminconnect提示这个步骤已被弃用，改为直接删除令牌文件来退出，但我们需要保留令牌以便下次自动复用。
+    garminconnect 库会自动处理令牌刷新和更新。
+    """
     from garminconnect import Garmin, GarminConnectAuthenticationError
     import garth
     
@@ -42,10 +46,7 @@ def download_garmin_activities():
         print("登录失败，程序退出")
         return False
     
-    try:
-        return _download_all_garmin_fit_files(client, download_folder)
-    finally:
-        client.logout()
+    return _download_all_garmin_fit_files(client, download_folder)
 
 
 def _login_garmin():
@@ -148,13 +149,23 @@ def _download_all_garmin_fit_files(client, download_folder):
         print(f"已检查现有文件 ({len(existing_files)} 个)...")
         
         print("开始下载新的活动文件...")
+        skip_count = 0
+        last_was_skip = False
         for index, activity in enumerate(activities, 1):
             try:
                 activity_id = activity['activityId']
                 
                 if activity_id in activity_id_to_files:
-                    print(f"({index}/{len(activities)}) 活动已存在，跳过下载: {activity_id}")
+                    skip_count += 1
+                    if not last_was_skip and skip_count == 1:
+                        print()
+                    print(f"\r({index}/{len(activities)}) 检查活动中... 已跳过 {skip_count} 个", end="", flush=True)
+                    last_was_skip = True
                     continue
+                
+                if last_was_skip:
+                    print()
+                    last_was_skip = False
                 
                 start_time_str = activity.get('startTimeLocal') or activity.get('startTimeGMT', '')
                 if not start_time_str:
@@ -200,6 +211,8 @@ def _download_all_garmin_fit_files(client, download_folder):
                 print(f"({index}/{len(activities)}) 下载失败: activity_{activity_id} - {e}")
                 time.sleep(2)
         
+        if skip_count > 0:
+            print(f"\n共跳过 {skip_count} 个已存在的活动")
         print("所有FIT文件下载完成！")
         return True
         
@@ -284,15 +297,28 @@ def _download_all_coros_fit_files(client, download_folder):
                 existing_activity_ids.add(id_match.group(1))
 
         print("开始下载未存在的活动文件...")
+        skip_count = 0
+        last_was_skip = False
         for index, activity in enumerate(activities, 1):
             activity_id = activity.get('labelId')
             if not activity_id:
+                if last_was_skip:
+                    print()
+                    last_was_skip = False
                 print(f"({index}/{len(activities)}) 缺少活动ID，跳过")
                 continue
 
             if str(activity_id) in existing_activity_ids:
-                print(f"({index}/{len(activities)}) 活动已存在，跳过下载: {activity_id}")
+                skip_count += 1
+                if not last_was_skip and skip_count == 1:
+                    print()
+                print(f"\r({index}/{len(activities)}) 检查活动中... 已跳过 {skip_count} 个", end="", flush=True)
+                last_was_skip = True
                 continue
+
+            if last_was_skip:
+                print()
+                last_was_skip = False
 
             try:
                 sport_type = activity.get('sportType', 100)
@@ -353,6 +379,8 @@ def _download_all_coros_fit_files(client, download_folder):
                 print(f"({index}/{len(activities)}) 下载失败: activity_{activity_id} - {e}")
                 time.sleep(2)
 
+        if skip_count > 0:
+            print(f"\n共跳过 {skip_count} 个已存在的活动")
         print("所有FIT文件下载完成！")
         return True
 
