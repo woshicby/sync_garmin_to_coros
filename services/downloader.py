@@ -148,8 +148,9 @@ def _download_all_garmin_fit_files(client, download_folder):
         
         print(f"已检查现有文件 ({len(existing_files)} 个)...")
         
-        print("开始下载新的活动文件...")
+        print("开始下载活动文件...")
         skip_count = 0
+        download_count = 0
         last_was_skip = False
         for index, activity in enumerate(activities, 1):
             try:
@@ -157,8 +158,6 @@ def _download_all_garmin_fit_files(client, download_folder):
                 
                 if activity_id in activity_id_to_files:
                     skip_count += 1
-                    if not last_was_skip and skip_count == 1:
-                        print()
                     print(f"\r({index}/{len(activities)}) 检查活动中... 已跳过 {skip_count} 个", end="", flush=True)
                     last_was_skip = True
                     continue
@@ -205,15 +204,19 @@ def _download_all_garmin_fit_files(client, download_folder):
                             with open(fit_path, 'wb') as f:
                                 f.write(fit_data)
                             
+                            download_count += 1
                             print(f"({index}/{len(activities)}) 下载成功: {new_filename}")
                 time.sleep(1)
             except Exception as e:
                 print(f"({index}/{len(activities)}) 下载失败: activity_{activity_id} - {e}")
                 time.sleep(2)
         
+        if last_was_skip:
+            print()
+        
         if skip_count > 0:
-            print(f"\n共跳过 {skip_count} 个已存在的活动")
-        print("所有FIT文件下载完成！")
+            print(f"共跳过 {skip_count} 个已存在的活动")
+        print(f"所有活动检查完成，新下载 {download_count} 个文件")
         return True
         
     except Exception as e:
@@ -296,8 +299,9 @@ def _download_all_coros_fit_files(client, download_folder):
             if id_match:
                 existing_activity_ids.add(id_match.group(1))
 
-        print("开始下载未存在的活动文件...")
+        print("开始下载活动文件...")
         skip_count = 0
+        download_count = 0
         last_was_skip = False
         for index, activity in enumerate(activities, 1):
             activity_id = activity.get('labelId')
@@ -310,8 +314,6 @@ def _download_all_coros_fit_files(client, download_folder):
 
             if str(activity_id) in existing_activity_ids:
                 skip_count += 1
-                if not last_was_skip and skip_count == 1:
-                    print()
                 print(f"\r({index}/{len(activities)}) 检查活动中... 已跳过 {skip_count} 个", end="", flush=True)
                 last_was_skip = True
                 continue
@@ -373,15 +375,18 @@ def _download_all_coros_fit_files(client, download_folder):
                     response.release_conn()
 
                 print(f"({index}/{len(activities)}) 下载成功: {new_filename}")
+                download_count += 1
 
                 time.sleep(1)
             except Exception as e:
                 print(f"({index}/{len(activities)}) 下载失败: activity_{activity_id} - {e}")
                 time.sleep(2)
-
+        
+        if last_was_skip:
+            print()
         if skip_count > 0:
-            print(f"\n共跳过 {skip_count} 个已存在的活动")
-        print("所有FIT文件下载完成！")
+            print(f"共跳过 {skip_count} 个已存在的活动")
+        print(f"所有活动检查完成，新下载 {download_count} 个文件")
         return True
 
     except Exception as e:

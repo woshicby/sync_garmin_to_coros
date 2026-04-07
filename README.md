@@ -114,7 +114,7 @@ sync_garmin_to_coros/
 2. 配置文件位置：
    - `config/garmin_config.json`: Garmin Connect 登录配置
    - `config/coros_config.json`: Coros 登录配置
-   - `config/sync_whitelist.txt`: 同步白名单配置（可选）
+   - `config/sync_whitelist.md`: 同步白名单配置（可选）
 
 3. 配置文件格式：
 
@@ -134,7 +134,7 @@ sync_garmin_to_coros/
    }
    ```
 
-   **config/sync_whitelist.txt** (用于指定需要跳过的活动对):
+   **config/sync_whitelist.md** (用于指定需要跳过的活动对):
    ```
    # 同步白名单配置文件
    # 格式：佳明活动完整文件名 高驰活动完整文件名
@@ -227,6 +227,7 @@ python tools/improved_fit_parser.py
 - v1.5.0: 支持多区域配置（国际区、中国区、欧洲区）
 - v1.6.0: 更新依赖库，优化登录流程
 - v2.0.0: 重构项目结构，模块化设计，统一配置管理
+- v2.1.0: 优化活动同步逻辑，白名单文件改为md格式，增强报告统计信息，改进多项运动文件处理流程
 
 ## 许可证
 
@@ -340,7 +341,7 @@ The tool supports three regions with different API endpoints and storage service
 2. Configuration file locations:
    - `config/garmin_config.json`: Garmin Connect login configuration
    - `config/coros_config.json`: Coros login configuration
-   - `config/sync_whitelist.txt`: Sync whitelist configuration (optional)
+   - `config/sync_whitelist.md`: Sync whitelist configuration (optional)
 
 3. Configuration file format:
 
@@ -360,7 +361,7 @@ The tool supports three regions with different API endpoints and storage service
    }
    ```
 
-   **config/sync_whitelist.txt** (for specifying activity pairs to skip):
+   **config/sync_whitelist.md** (for specifying activity pairs to skip):
    ```
    # Sync whitelist configuration file
    # Format: Garmin activity full filename Coros activity full filename
@@ -449,6 +450,7 @@ python tools/improved_fit_parser.py
 - v1.5.0: Added multiple region support (International, Chinese, European)
 - v1.6.0: Updated dependencies, optimized login flow
 - v2.0.0: Refactored project structure, modular design, unified configuration management
+- v2.1.0: Optimized activity sync logic, changed whitelist file to md format, enhanced report statistics, improved multi-sport file processing
 
 ## License
 
@@ -619,6 +621,7 @@ python tools/improved_fit_parser.py
 - v1.5.0: 複数地域サポートを追加（国際版、中国版、欧州版）
 - v1.6.0: 依存関係を更新、ログインフローを最適化
 - v2.0.0: プロジェクト構造をリファクタリング、モジュラー設計、統一設定管理
+- v2.1.0: アクティビティ同期ロジックを最適化、ホワイトリストファイルをmd形式に変更、レポート統計情報を強化、マルチスポーツファイル処理を改善
 
 ## ライセンス
 

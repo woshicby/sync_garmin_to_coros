@@ -52,12 +52,19 @@ SPORT_TYPE_MAPPING = {
     10001: "multi_sport",
 }
 
-AUTO_WHITELIST_TYPES = {"walking", "indoor_climbing", "bouldering"}
+SKIP_UPLOAD_TYPES = {"walking", "indoor_climbing", "bouldering"}
 
 TYPE_COMMENTS = {
-    "walking": "# walking类型文件",
-    "indoor_climbing": "# 室内攀岩类型文件",
-    "bouldering": "# 抱石头类型文件",
+    "walking": "## 步行类型文件",
+    "indoor_climbing": "## 室内攀岩类型文件",
+    "bouldering": "## 抱石类型文件",
+    "multi_sport": "## 多项运动类型文件",
+    "running": "## 跑步类型文件",
+    "cycling": "## 骑行类型文件",
+    "strength_training": "## 力量训练类型文件",
+    "yoga": "## 瑜伽类型文件",
+    "hiking": "## 徒步类型文件",
+    "boating_v2": "## 划船类型文件",
 }
 
 OSS_APP_ID = "1660188068672619112"
@@ -72,7 +79,7 @@ CONFIG_FILES = {
     'garmin': os.path.join(DIRS['config'], 'garmin_config.json'),
     'coros': os.path.join(DIRS['config'], 'coros_config.json'),
     'oss': os.path.join(DIRS['config'], 'oss_config.json'),
-    'sync_whitelist': os.path.join(DIRS['config'], 'sync_whitelist.txt'),
+    'sync_whitelist': os.path.join(DIRS['config'], 'sync_whitelist.md'),
 }
 
 REPORT_FILES = {
@@ -82,8 +89,6 @@ REPORT_FILES = {
     'sync_report': os.path.join(DIRS['reports'], 'sync_report.txt'),
     'analysis': os.path.join(DIRS['reports'], 'analysis_result.txt'),
 }
-
-NORMAL_SPORT_TYPES = {"running", "walking", "cycling", "hiking", "yoga"}
 
 
 def ensure_directories():
