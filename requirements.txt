@@ -1,4 +1,5 @@
 garminconnect>=0.2.19
+garth
 urllib3
 certifi
 requests
