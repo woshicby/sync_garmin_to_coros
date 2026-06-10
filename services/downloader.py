@@ -13,15 +13,88 @@ import re
 import os
 import zipfile
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DIRS, SPORT_TYPE_MAPPING, CONFIG_FILES
 from config_manager import get_garmin_config
+from garmin_fit_sdk import Decoder, Stream
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+FIT_EPOCH = datetime(1989, 12, 31, 0, 0, 0)
+# 默认时区偏移：UTC+8（中国时区），当 FIT 文件中无时区信息时使用
+DEFAULT_TZ_OFFSET_SECONDS = 8 * 3600
+
+
+def _get_tz_offset(msgs):
+    """从 FIT 消息中获取时区偏移（秒）
+
+    优先从 activity_mesgs 中的 local_timestamp 与 timestamp 差值获取。
+    如果文件中没有时区信息，返回默认 UTC+8。
+
+    Returns:
+        int: 时区偏移秒数
+    """
+    if 'activity_mesgs' in msgs:
+        for act in msgs['activity_mesgs']:
+            ts = act.get('timestamp')
+            local_ts = act.get('local_timestamp')
+            if ts is not None and local_ts is not None:
+                return local_ts - ts
+    return DEFAULT_TZ_OFFSET_SECONDS
+
+
+def _extract_fit_start_time(fit_data):
+    """从 FIT 文件二进制数据中提取活动开始时间
+
+    时区逻辑：优先使用文件中的 local_timestamp 计算时区偏移，
+    如果文件中没有则回退到 UTC+8。
+
+    Args:
+        fit_data: FIT 文件的二进制数据
+
+    Returns:
+        datetime or None: 活动的本地开始时间
+    """
+    if not fit_data or len(fit_data) < 14:
+        return None
+
+    try:
+        stream = Stream.from_byte_array(fit_data)
+        decoder = Decoder(stream)
+        msgs, errors = decoder.read(
+            convert_datetimes_to_dates=False,
+            expand_sub_fields=True,
+            expand_components=True,
+            merge_heart_rates=False,
+        )
+
+        tz_offset = _get_tz_offset(msgs)
+
+        # 从 session_mesgs 获取 start_time
+        if 'session_mesgs' in msgs:
+            for sess in msgs['session_mesgs']:
+                start_time = sess.get('start_time')
+                if start_time is not None:
+                    utc_dt = FIT_EPOCH + timedelta(seconds=start_time)
+                    return utc_dt + timedelta(seconds=tz_offset)
+
+        # 回退：从 file_id_mesgs 获取 time_created
+        if 'file_id_mesgs' in msgs:
+            for fid in msgs['file_id_mesgs']:
+                time_created = fid.get('time_created')
+                if time_created is not None:
+                    utc_dt = FIT_EPOCH + timedelta(seconds=time_created)
+                    return utc_dt + timedelta(seconds=tz_offset)
+
+        return None
+
+    except Exception as e:
+        print(f"从 FIT 文件提取时间失败: {e}")
+        return None
 
 
 def get_activity_type(sport_type):
@@ -166,20 +239,7 @@ def _download_all_garmin_fit_files(client, download_folder):
                     print()
                     last_was_skip = False
                 
-                start_time_str = activity.get('startTimeLocal') or activity.get('startTimeGMT', '')
-                if not start_time_str:
-                    print(f"({index}/{len(activities)}) 缺少时间信息，跳过: activity_{activity_id}")
-                    continue
-                
-                start_time_str = start_time_str.replace('Z', '').split('.')[0]
-                try:
-                    start_time = datetime.fromisoformat(start_time_str)
-                except ValueError:
-                    print(f"({index}/{len(activities)}) 时间格式错误，跳过: activity_{activity_id}")
-                    continue
-                
-                date_part = start_time.strftime("%Y%m%d")
-                time_part = start_time.strftime("%H%M%S")
+                zip_data = client.download_activity(activity_id, Garmin.ActivityDownloadFormat.ORIGINAL)
                 
                 activity_type = "unknown"
                 if 'activityType' in activity:
@@ -192,15 +252,34 @@ def _download_all_garmin_fit_files(client, download_folder):
                 activity_name = re.sub(r'[\\/:*?"<>|]', '_', activity_name)
                 activity_name = activity_name.replace(' ', '')
                 
-                new_filename = f"{date_part}-{time_part}-{activity_type}-{activity_name}-{activity_id}.fit"
-                fit_path = os.path.join(download_folder, new_filename)
-                
-                zip_data = client.download_activity(activity_id, Garmin.ActivityDownloadFormat.ORIGINAL)
-                
                 with zipfile.ZipFile(io.BytesIO(zip_data), 'r') as zf:
-                    for filename in zf.namelist():
-                        if filename.endswith('.fit'):
-                            fit_data = zf.read(filename)
+                    for zip_filename in zf.namelist():
+                        if zip_filename.endswith('.fit'):
+                            fit_data = zf.read(zip_filename)
+                            
+                            # 优先从 FIT 文件内部提取开始时间
+                            start_time = _extract_fit_start_time(fit_data)
+                            
+                            # 回退：FIT 解析失败时使用 API 元数据
+                            if start_time is None:
+                                start_time_str = activity.get('startTimeLocal') or activity.get('startTimeGMT', '')
+                                if start_time_str:
+                                    start_time_str = start_time_str.replace('Z', '').split('.')[0]
+                                    try:
+                                        start_time = datetime.fromisoformat(start_time_str)
+                                    except ValueError:
+                                        start_time = None
+                            
+                            if start_time is None:
+                                print(f"({index}/{len(activities)}) 无法获取时间信息，跳过: activity_{activity_id}")
+                                break
+                            
+                            date_part = start_time.strftime("%Y%m%d")
+                            time_part = start_time.strftime("%H%M%S")
+                            
+                            new_filename = f"{date_part}-{time_part}-{activity_type}-{activity_name}-{activity_id}.fit"
+                            fit_path = os.path.join(download_folder, new_filename)
+                            
                             with open(fit_path, 'wb') as f:
                                 f.write(fit_data)
                             
@@ -323,7 +402,9 @@ def _download_all_coros_fit_files(client, download_folder):
                 last_was_skip = False
 
             try:
-                sport_type = activity.get('sportType', 100)
+                sport_type = activity.get('sportType') or 100
+                if sport_type == 65535:
+                    sport_type = 100
                 
                 download_url = f"{client.teamapi}/activity/detail/download?labelId={activity_id}&sportType={sport_type}&fileType=4"
                 
@@ -337,42 +418,46 @@ def _download_all_coros_fit_files(client, download_folder):
                 response = client.req.request('POST', download_url, headers=headers)
                 download_result = json.loads(response.data)
                 if download_result['result'] != '0000':
-                    print(f"({index}/{len(activities)}) 获取下载URL失败: activity_{activity_id} - {download_result['message']}")
+                    print(f"({index}/{len(activities)}) 获取下载URL失败: activity_{activity_id} sportType={sport_type} - {download_result['message']}")
                     continue
                 
                 fit_url = download_result['data']['fileUrl']
                 
-                begin_time = activity.get('startTime')
-                if not begin_time:
-                    print(f"({index}/{len(activities)}) 缺少时间信息，跳过")
+                # 先下载 FIT 数据到内存
+                fit_data = None
+                try:
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    download_response = requests.get(fit_url, headers=headers)
+                    download_response.raise_for_status()
+                    fit_data = download_response.content
+                except Exception:
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    response_alt = client.req.request('GET', fit_url, headers=headers, preload_content=True)
+                    fit_data = response_alt.data
+                
+                # 优先从 FIT 文件内部提取开始时间
+                start_time = _extract_fit_start_time(fit_data) if fit_data else None
+                
+                # 回退：FIT 解析失败时使用 API 元数据
+                if start_time is None:
+                    begin_time = activity.get('startTime')
+                    if begin_time:
+                        start_time = datetime.fromtimestamp(begin_time)
+                
+                if start_time is None:
+                    print(f"({index}/{len(activities)}) 无法获取时间信息，跳过")
                     continue
                 
-                dt = datetime.fromtimestamp(begin_time)
-                date_part = dt.strftime("%Y%m%d")
-                time_part = dt.strftime("%H%M%S")
+                date_part = start_time.strftime("%Y%m%d")
+                time_part = start_time.strftime("%H%M%S")
                 
                 activity_type = get_activity_type(sport_type)
                 
                 new_filename = f"{date_part}-{time_part}-{activity_type}-{activity_id}.fit"
                 fit_path = os.path.join(download_folder, new_filename)
                 
-                try:
-                    headers = {"User-Agent": "Mozilla/5.0"}
-                    download_response = requests.get(fit_url, stream=True, headers=headers)
-                    download_response.raise_for_status()
-
-                    with open(fit_path, "wb") as f:
-                        for chunk in download_response.iter_content(chunk_size=8192):
-                            f.write(chunk)
-                except Exception:
-                    headers = {"User-Agent": "Mozilla/5.0"}
-                    response = client.req.request('GET', fit_url, headers=headers, preload_content=False)
-                    
-                    with open(fit_path, "wb") as f:
-                        for chunk in response.stream(8192):
-                            if chunk:
-                                f.write(chunk)
-                    response.release_conn()
+                with open(fit_path, "wb") as f:
+                    f.write(fit_data)
 
                 print(f"({index}/{len(activities)}) 下载成功: {new_filename}")
                 download_count += 1

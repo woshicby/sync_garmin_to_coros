@@ -1,5 +1,6 @@
 garminconnect>=0.2.19
 garth
+garmin-fit-sdk
 urllib3
 certifi
 requests

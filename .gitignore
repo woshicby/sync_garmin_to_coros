@@ -6,12 +6,8 @@ tokens/*
 config/*
 !.gitkeep
 
-# 忽略downloads/coros/文件夹中的文件但保留文件夹本身
-downloads/coros/*
-!.gitkeep
-
-# 忽略downloads/garmin/文件夹中的文件但保留文件夹本身
-downloads/garmin/*
+# 忽略downloads文件夹中的文件但保留文件夹本身
+downloads/*
 !.gitkeep
 
 # 忽略reports文件夹中的文件但保留文件夹本身

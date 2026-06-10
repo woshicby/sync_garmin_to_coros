@@ -8,11 +8,12 @@
 
 from .downloader import download_garmin_activities, download_coros_activities
 from .analyzer import analyze_activities
-from .syncer import sync_activities
+from .syncer import sync_activities, sync_coros_to_garmin
 
 __all__ = [
     'download_garmin_activities',
     'download_coros_activities',
     'analyze_activities',
-    'sync_activities'
+    'sync_activities',
+    'sync_coros_to_garmin'
 ]

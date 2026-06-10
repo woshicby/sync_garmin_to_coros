@@ -345,6 +345,10 @@ class CorosClient:
         """下载活动文件"""
         self._check_token()
         
+        sport_type = sport_type or 100
+        if sport_type == 65535:
+            sport_type = 100
+        
         get_download_url = f"{self.teamapi}/activity/detail/download?labelId={activity_id}&sportType={sport_type}&fileType=4"
         
         headers = {

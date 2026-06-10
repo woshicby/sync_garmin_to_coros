@@ -80,6 +80,7 @@ CONFIG_FILES = {
     'coros': os.path.join(DIRS['config'], 'coros_config.json'),
     'oss': os.path.join(DIRS['config'], 'oss_config.json'),
     'sync_whitelist': os.path.join(DIRS['config'], 'sync_whitelist.md'),
+    'uploaded_files': os.path.join(DIRS['config'], 'uploaded_files.txt'),
 }
 
 REPORT_FILES = {
