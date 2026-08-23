@@ -3,7 +3,10 @@
 """
 Coros API 客户端
 
-提供 Coros 平台的登录、活动管理和上传功能。
+提供 Coros 平台的登录、活动管理和上传功能：
+- login_coros: 交互式登录（保存 token）
+- CorosClient: 核心客户端（登录 / token 持久化 / 上传 / 活动列表 / 下载）
+- 异常类型：CorosLoginError / CorosActivityUploadError
 """
 
 import urllib3
@@ -17,8 +20,8 @@ import logging
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config_manager import get_coros_config
-from config import REGION_CONFIG, STS_CONFIG
+from core.config import get_coros_config
+from core.config import REGION_CONFIG, STS_CONFIG
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 

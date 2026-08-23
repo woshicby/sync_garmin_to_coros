@@ -6,6 +6,9 @@
 
 使用 garmin_fit_sdk 正确解析 FIT 文件，提取 session_mesgs.start_time，
 统一使用 UTC+8 时区偏移转为本地时间。
+
+⚠ 归档说明：时间提取逻辑已统一到 core/fit_parser.py，下载流程已内置该功能。
+本文件仅留档参考，不建议继续使用。
 """
 
 import os

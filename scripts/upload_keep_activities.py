@@ -3,107 +3,81 @@
 """
 Keep 历史活动批量上传工具
 
-将 downloads/keep 目录中的古老 Keep 运动记录批量上传到 Garmin 和 Coros 两个平台。
+将 Keep 运动 App 的历史活动（FIT 文件）批量上传到 Garmin 和 Coros 两个平台。
+
+结构：
+- _upload_to_coros: 单个文件上传到 Coros（压缩 → MD5 → OSS → 导入接口）
+- upload_keep_activities: 主流程（扫描 → 登录 → 逐文件双平台上传 → 报告）
+- 登录复用 core.downloader._login_garmin 与 core.syncer._init_coros_client
 """
 
 import os
 import re
 import sys
 import time
-import json
 import tempfile
 import zipfile
-import hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import DIRS, STS_CONFIG, OSS_APP_ID, OSS_SIGN
-from config_manager import get_garmin_config, get_coros_config
-from clients.coros_client import CorosClient
-from storage.oss_client import get_oss_client, calculate_md5_file
+from core.config import DIRS, STS_CONFIG
+from core.oss_client import get_oss_client, calculate_md5_file
+from core.downloader import _login_garmin
+from core.syncer import _init_coros_client
 
 # Keep 文件中文运动类型 → 英文类型映射
+# 实际目录中出现的类型：行走 / 健身 / 跑步 / 骑行 / 瑜伽
 KEEP_TYPE_MAP = {
     "步行": "walking",
+    "行走": "walking",
     "徒步": "hiking",
     "跑步": "running",
     "骑行": "cycling",
+    "健身": "strength_training",
+    "瑜伽": "yoga",
 }
 
-KEEP_DIR = os.path.join(DIRS['downloads'], 'others')
+# Keep 历史活动所在目录（merged = 手环合并数据, phone = 手机记录）
+KEEP_DIRS = [
+    os.path.join(DIRS['downloads'], 'KEEP_merged'),
+    os.path.join(DIRS['downloads'], 'KEEP_phone'),
+]
 REPORT_FILE = os.path.join(DIRS['reports'], 'others_upload_report.txt')
 
 
-def _login_garmin():
-    """登录 Garmin Connect"""
-    try:
-        from garminconnect import Garmin, GarminConnectAuthenticationError
-        import garth
+def _collect_keep_files():
+    """扫描所有 Keep 目录, 收集 FIT 文件
 
-        config_manager = get_garmin_config()
-        config = config_manager.load()
-        email = config.get('email')
-        password = config.get('password')
-
-        if not email or not password:
-            email = input("请输入Garmin Connect邮箱: ")
-            password = input("请输入Garmin Connect密码: ")
-            config_manager.update({'email': email, 'password': password})
-            config_manager.save()
-
-        client = Garmin(
-            email=email,
-            password=password,
-            is_cn=True,
-            prompt_mfa=lambda: input("请输入Garmin Connect验证码（已发送到您的邮箱）: ")
-        )
-
-        tokenstore = DIRS['garmin_tokens']
-        os.makedirs(tokenstore, exist_ok=True)
-
-        has_token_files = os.path.exists(os.path.join(tokenstore, "oauth1_token.json")) and \
-                         os.path.exists(os.path.join(tokenstore, "oauth2_token.json"))
-
-        if has_token_files:
-            client.login(tokenstore)
-            print("Garmin 登录成功！")
-        else:
-            client.login()
-            client.garth.dump(tokenstore)
-            print("Garmin 登录成功！令牌已保存。")
-
-        return client
-    except Exception as e:
-        print(f"Garmin 登录失败: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
+    Returns:
+        list: [(file_path, filename), ...] 全部 Keep 活动文件
+    """
+    files = []
+    for keep_dir in KEEP_DIRS:
+        if not os.path.exists(keep_dir):
+            print(f"⚠ Keep 目录不存在: {keep_dir}")
+            continue
+        for filename in sorted(os.listdir(keep_dir)):
+            if filename.endswith('.fit'):
+                files.append((os.path.join(keep_dir, filename), filename))
+    return files
 
 
-def _init_coros_client():
-    """初始化 Coros 客户端"""
-    try:
-        config_manager = get_coros_config()
-        config = config_manager.load()
-        email = config.get("email", "")
-        password = config.get("password", "")
-
-        print(f"已加载Coros配置，邮箱: {email}")
-
-        coros_client = CorosClient(email, password)
-        coros_client._check_token()
-        print(f"Coros 登录成功！用户ID: {coros_client.user_id}, 区域ID: {coros_client.region_id}")
-
-        return coros_client
-    except Exception as e:
-        print(f"Coros 客户端初始化失败: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-
+# ══════════════════════════════════════════════════════════════
+# 单个文件上传到 Coros
+# ══════════════════════════════════════════════════════════════
 def _upload_to_coros(coros_client, file_path, filename):
-    """上传单个文件到 Coros"""
+    """上传单个文件到 Coros
+
+    流程：压缩为 zip → 计算 MD5 → 上传 OSS → 调用高驰导入接口
+
+    Args:
+        coros_client: 已登录的 CorosClient
+        file_path: 本地 FIT 文件路径
+        filename: 目标文件名
+
+    Returns:
+        bool: 是否上传成功
+    """
     user_id = coros_client.user_id
     region_id = coros_client.region_id
 
@@ -142,18 +116,24 @@ def _upload_to_coros(coros_client, file_path, filename):
             os.remove(temp_zip_path)
 
 
+# ══════════════════════════════════════════════════════════════
+# 主流程
+# ══════════════════════════════════════════════════════════════
 def upload_keep_activities():
-    """批量上传 Keep 活动到 Garmin 和 Coros"""
+    """批量上传 Keep 活动到 Garmin 和 Coros
+
+    流程：扫描 Keep 目录 → 统计类型 → 登录两个平台 → 逐文件双平台上传
+    → 生成报告（reports/others_upload_report.txt）
+
+    Returns:
+        bool: 是否执行成功
+    """
     print("=" * 60)
     print("Keep 历史活动批量上传工具")
     print("=" * 60)
 
-    # 扫描 Keep 文件
-    if not os.path.exists(KEEP_DIR):
-        print(f"错误: Keep 目录不存在: {KEEP_DIR}")
-        return False
-
-    keep_files = sorted([f for f in os.listdir(KEEP_DIR) if f.endswith('.fit')])
+    # 扫描 Keep 文件（合并所有 Keep 目录）
+    keep_files = _collect_keep_files()
     if not keep_files:
         print("未找到任何 Keep 活动文件")
         return False
@@ -162,7 +142,7 @@ def upload_keep_activities():
 
     # 统计类型分布
     type_counts = {}
-    for f in keep_files:
+    for _, f in keep_files:
         match = re.match(r'^\d{8}-\d{6}-(\w+)', f)
         if match:
             cn_type = match.group(1)
@@ -202,9 +182,7 @@ def upload_keep_activities():
     total = len(keep_files)
     start_time = time.time()
 
-    for i, filename in enumerate(keep_files):
-        file_path = os.path.join(KEEP_DIR, filename)
-
+    for i, (file_path, filename) in enumerate(keep_files):
         match = re.match(r'^(\d{8}-\d{6})-(\w+)', filename)
         cn_type = match.group(2) if match else "未知"
         en_type = KEEP_TYPE_MAP.get(cn_type, cn_type)

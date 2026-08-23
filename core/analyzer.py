@@ -3,7 +3,10 @@
 """
 活动分析服务
 
-提供 Garmin 和 Coros 活动文件的对比分析功能。
+提供 Garmin 和 Coros 活动文件的对比分析功能：
+1. 扫描两个平台的本地下载目录，解析文件名中的日期时间与类型
+2. 按日期时间匹配找出重复活动
+3. 生成四类报告（类型不匹配 / Coros 独有 / Garmin 独有 / 统计摘要）
 """
 
 import os
@@ -14,14 +17,21 @@ import json
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import (
+from core.config import (
     DIRS, CONFIG_FILES, REPORT_FILES, 
     TYPE_COMMENTS
 )
 
 
+# ══════════════════════════════════════════════════════════════
+# 分析主入口
+# ══════════════════════════════════════════════════════════════
 def analyze_activities():
-    """分析活动文件，找出 Garmin 独有的活动"""
+    """分析活动文件，生成差异报告
+
+    流程：读取 Garmin/Coros 文件信息 → 找重复 → 生成 4 份报告
+    （mismatched / coros_only / garmin_only / analysis）
+    """
     result_folder = DIRS['reports']
     os.makedirs(result_folder, exist_ok=True)
     
@@ -39,8 +49,11 @@ def analyze_activities():
     _generate_analysis_report(garmin_files, coros_files, duplicates, result_folder)
 
 
+# ══════════════════════════════════════════════════════════════
+# 文件信息扫描
+# ══════════════════════════════════════════════════════════════
 def _get_garmin_files_info():
-    """获取佳明下载文件的信息"""
+    """获取佳明下载文件的信息（解析文件名 → 日期时间/类型/路径）"""
     garmin_dir = DIRS['garmin_downloads']
     garmin_files = []
     
@@ -73,7 +86,7 @@ def _get_garmin_files_info():
 
 
 def _get_coros_files_info():
-    """获取高驰下载文件的信息"""
+    """获取高驰下载文件的信息（解析文件名 → 日期时间/类型/路径）"""
     coros_dir = DIRS['coros_downloads']
     coros_files = []
     
@@ -103,8 +116,19 @@ def _get_coros_files_info():
     return coros_files
 
 
+# ══════════════════════════════════════════════════════════════
+# 重复匹配与报告生成
+# ══════════════════════════════════════════════════════════════
 def _find_duplicate_activities(garmin_files, coros_files):
-    """根据日期和时间查找重复活动"""
+    """根据日期和时间查找重复活动
+
+    Args:
+        garmin_files: Garmin 文件信息列表（含 "datetime" 键）
+        coros_files: Coros 文件信息列表（含 "datetime" 键）
+
+    Returns:
+        list: [(garmin_file, coros_file), ...] 重复活动对
+    """
     duplicates = []
     
     garmin_datetime_map = {file["datetime"]: file for file in garmin_files}
@@ -119,7 +143,7 @@ def _find_duplicate_activities(garmin_files, coros_files):
 
 
 def _generate_mismatched_report(duplicates, result_folder):
-    """生成活动类型不匹配报告"""
+    """生成活动类型不匹配报告（同名活动但类型不同）"""
     mismatched_output = []
     mismatched_count = len([(g, c) for g, c in duplicates if g['sport_type'] != c['sport_type']])
     mismatched_output.append(f"高驰和佳明活动类型不匹配的文件名单：")
@@ -141,7 +165,7 @@ def _generate_mismatched_report(duplicates, result_folder):
 
 
 def _generate_coros_only_report(coros_files, garmin_datetimes, result_folder):
-    """生成高驰独有活动报告"""
+    """生成高驰独有活动报告（高驰有而佳明没有）"""
     coros_only_output = []
     
     coros_only_files = []
@@ -166,7 +190,7 @@ def _generate_coros_only_report(coros_files, garmin_datetimes, result_folder):
 
 
 def _generate_garmin_only_report(garmin_files, coros_datetimes, result_folder):
-    """生成佳明独有活动报告"""
+    """生成佳明独有活动报告（佳明有而高驰没有，即待同步列表）"""
     garmin_only_output = []
     
     garmin_only_files = []
@@ -191,7 +215,7 @@ def _generate_garmin_only_report(garmin_files, coros_datetimes, result_folder):
 
 
 def _generate_analysis_report(garmin_files, coros_files, duplicates, result_folder):
-    """生成综合分析报告"""
+    """生成分析摘要报告（文件数 / 匹配数 / 类型分布统计）"""
     output = []
     output.append("="*50)
     output.append("活动文件分析报告")

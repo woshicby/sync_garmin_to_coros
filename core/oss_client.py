@@ -3,7 +3,10 @@
 """
 OSS 存储客户端
 
-提供阿里云 OSS 和 AWS S3 的文件上传功能。
+提供阿里云 OSS 和 AWS S3 的文件上传功能：
+- calculate_md5_file: 计算文件 MD5（上传完整性校验）
+- decode_oss_credentials / get_oss_sts_token: 获取并解析 STS 临时凭据
+- OssClient: 分片上传客户端
 """
 
 import os
@@ -16,15 +19,15 @@ import base64
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import OSS_APP_ID, OSS_SIGN, OSS_SALT
+from core.config import OSS_APP_ID, OSS_SIGN, OSS_SALT
 
 
 def calculate_md5_file(file_path):
-    """计算文件的MD5值
-    
+    """计算文件 MD5 值（分块读取，用于大文件上传校验）
+
     Args:
         file_path: 文件路径
-        
+
     Returns:
         str: 计算得到的MD5字符串
     """

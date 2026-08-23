@@ -3,7 +3,11 @@
 """
 活动同步服务
 
-提供 Garmin 和 Coros 双向活动同步功能。
+提供 Garmin 和 Coros 双向活动同步功能：
+- sync_activities: 同步佳明独有活动 → 高驰（压缩 FIT → 传 OSS → 高驰导入）
+- sync_coros_to_garmin: 同步高驰独有活动 → 佳明
+- 白名单机制：跳过用户手动指定的活动对 / 上传失败的活动
+- 上传记录机制：避免重复上传已处理过的文件
 """
 
 import os
@@ -16,10 +20,10 @@ import zipfile
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import DIRS, STS_CONFIG, REPORT_FILES, CONFIG_FILES, TYPE_COMMENTS, SKIP_UPLOAD_TYPES
-from config_manager import get_coros_config, get_garmin_config
-from clients.coros_client import CorosClient
-from storage.oss_client import get_oss_client, calculate_md5_file
+from core.config import DIRS, STS_CONFIG, REPORT_FILES, CONFIG_FILES, TYPE_COMMENTS, SKIP_UPLOAD_TYPES
+from core.config import get_coros_config, get_garmin_config
+from core.coros_client import CorosClient
+from core.oss_client import get_oss_client, calculate_md5_file
 
 
 def _add_to_whitelist(filename, coros_filename=None, is_failed=False):
@@ -107,8 +111,17 @@ def _add_to_whitelist(filename, coros_filename=None, is_failed=False):
         print(f"添加文件到白名单失败: {str(e)}")
 
 
+# ══════════════════════════════════════════════════════════════
+# Garmin → Coros 同步
+# ══════════════════════════════════════════════════════════════
 def sync_activities():
-    """同步 Garmin 独有活动到 Coros"""
+    """同步 Garmin 独有活动到 Coros（主入口）
+
+    流程：加载白名单/上传记录 → 筛选佳明独有活动 → 逐批上传到高驰
+
+    Returns:
+        int: 成功上传数量
+    """
     print("开始同步佳明活动到高驰...")
     
     coros_client = _init_coros_client()
@@ -128,7 +141,11 @@ def sync_activities():
 
 
 def _init_coros_client():
-    """初始化 Coros 客户端"""
+    """初始化 Coros 客户端（读取配置 → 创建客户端 → 验证 token）
+
+    Returns:
+        CorosClient 或 None（初始化失败）
+    """
     try:
         config_manager = get_coros_config()
         config = config_manager.load()
@@ -153,8 +170,11 @@ def _init_coros_client():
         return None
 
 
+# ══════════════════════════════════════════════════════════════
+# 白名单加载
+# ══════════════════════════════════════════════════════════════
 def _load_whitelist():
-    """加载白名单中的佳明文件名"""
+    """加载白名单中的佳明文件名（用户手动指定的跳过活动）"""
     whitelist_path = CONFIG_FILES['sync_whitelist']
     whitelist_garmin = set()
     
@@ -177,7 +197,7 @@ def _load_whitelist():
 
 
 def _load_activities_to_upload():
-    """加载需要上传的活动列表"""
+    """筛选需要上传的活动列表（佳明独有且未被白名单/上传记录跳过）"""
     garmin_only_file = REPORT_FILES['garmin_only']
     garmin_files_dir = DIRS['garmin_downloads']
     activities_to_upload = []
@@ -229,7 +249,7 @@ def _handle_multi_sport_whitelist(uploaded_files, coros_client):
         coros_client: Coros客户端
     """
     from datetime import datetime
-    from services.downloader import download_coros_activities
+    from core.downloader import download_coros_activities
     
     print("\n" + "="*50)
     print("📋 处理上传成功的多项运动文件...")
@@ -286,7 +306,18 @@ def _handle_multi_sport_whitelist(uploaded_files, coros_client):
 
 
 def _upload_activities(coros_client, activities_to_upload, garmin_only_count):
-    """上传活动文件"""
+    """批量上传活动到高驰
+
+    单个文件流程：压缩为 zip → 计算 MD5 → 上传 OSS → 调用高驰导入接口 → 记录结果
+
+    Args:
+        coros_client: 已登录的 CorosClient
+        activities_to_upload: 待上传文件列表
+        garmin_only_count: 佳明独有活动总数（用于进度显示）
+
+    Returns:
+        int: 成功上传数量
+    """
     garmin_files_dir = DIRS['garmin_downloads']
     
     whitelist_skip_count = garmin_only_count - len(activities_to_upload)
@@ -422,7 +453,7 @@ def _upload_activities(coros_client, activities_to_upload, garmin_only_count):
 
 
 def _load_coros_whitelist():
-    """加载白名单中的高驰文件名"""
+    """加载白名单中的高驰文件名（用户手动指定的跳过活动）"""
     whitelist_path = CONFIG_FILES['sync_whitelist']
     whitelist_coros = set()
     
@@ -448,7 +479,7 @@ def _load_coros_whitelist():
 
 
 def _load_uploaded_files():
-    """加载已上传文件记录"""
+    """加载已上传文件记录（config/uploaded_files.txt）"""
     uploaded_path = CONFIG_FILES['uploaded_files']
     uploaded = set()
     
@@ -466,7 +497,7 @@ def _load_uploaded_files():
 
 
 def _record_uploaded_file(filename):
-    """记录一个已上传的文件"""
+    """记录已上传文件，防止下次重复上传"""
     uploaded_path = CONFIG_FILES['uploaded_files']
     try:
         os.makedirs(os.path.dirname(uploaded_path), exist_ok=True)
@@ -489,8 +520,17 @@ def _check_duplicate_upload(filename, uploaded_set):
     return False
 
 
+# ══════════════════════════════════════════════════════════════
+# Coros → Garmin 同步
+# ══════════════════════════════════════════════════════════════
 def sync_coros_to_garmin():
-    """同步 Coros 独有活动到 Garmin"""
+    """同步 Coros 独有活动到 Garmin（主入口）
+
+    流程：筛选高驰独有活动 → 上传 FIT 到佳明 → 记录结果
+
+    Returns:
+        int: 成功上传数量
+    """
     from garminconnect import Garmin, GarminConnectAuthenticationError
     import garth
     

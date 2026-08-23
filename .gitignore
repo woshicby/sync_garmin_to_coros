@@ -17,6 +17,18 @@ reports/*
 # Python虚拟环境
 venv/
 env/
+.venv-windows/
+.venv-macos/
+
+# 运动数据文件（兜底，防止误放）
+*.fit
+*.gpx
+*.tcx
+
+# 账号凭据（兜底）
+*_config.json
+oauth*.json
+token*.json
 
 # Python编译文件
 __pycache__/

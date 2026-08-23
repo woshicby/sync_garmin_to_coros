@@ -10,6 +10,9 @@ FIT 文件解析工具
 - 扫描二进制数据中的时间戳候选值
 - 分析FIT文件并提取关键时间信息
 - 比较不同来源FIT文件的时间戳差异
+
+⚠ 归档说明：功能已被 garmin_fit_sdk + core/fit_parser.py 取代。
+本文件仅留档参考，不建议继续使用。
 """
 
 import os
@@ -19,7 +22,7 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import DIRS
+from core.config import DIRS
 
 FIT_EPOCH = datetime(1989, 12, 31, 0, 0, 0)
 
