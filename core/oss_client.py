@@ -52,9 +52,14 @@ def decode_oss_credentials(credential):
     return json.loads(credentials)
 
 
-def get_oss_sts_token(bucket, service, app_id, sign, v=2, access_token=None):
+def get_oss_sts_token(bucket, service, app_id, sign, v=2, access_token=None, sts_proxy=None):
     """获取OSS STS Token
-    
+
+    通道优先级（2026-10-03 高驰关闭旧开放接口后）：
+    1. web-proxy: 训练中心网页版 BFF 代理 ({sts_proxy}/api/proxy/oss/sts)，
+       用登录 accessToken 作 Cookie: CPL-coros-token 鉴权
+    2. legacy: faq.coros.com/openapi/oss/sts（已被服务端下线，返回 404，保留作回退）
+
     Args:
         bucket: 存储桶名称
         service: 服务类型 (aliyun/aws)
@@ -62,37 +67,59 @@ def get_oss_sts_token(bucket, service, app_id, sign, v=2, access_token=None):
         sign: 签名
         v: 版本号
         access_token: 访问令牌
-        
+        sts_proxy: 区域对应的训练中心 BFF 代理地址（STS_CONFIG 的 sts_proxy 字段）
+
     Returns:
         dict: STS凭证
     """
-    sts_token_url = f"https://faq.coros.com/openapi/oss/sts?bucket={bucket}&service={service}&app_id={app_id}&sign={sign}&v={v}"
-    
-    headers = {}
-    if access_token:
-        headers['accesstoken'] = access_token
-    
     req = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=certifi.where())
-    response = req.request('GET', sts_token_url, headers=headers)
-    
-    sts_token_response = json.loads(response.data)
-    if sts_token_response["code"] != 200:
-        raise Exception(f"获取OSS STS Token异常: {sts_token_response}")
-    
-    credentials = sts_token_response["data"]["credentials"]
-    return decode_oss_credentials(credentials)
+    errors = []
+
+    # 通道1: 训练中心 BFF 代理（需登录 token 鉴权）
+    if sts_proxy and access_token:
+        proxy_url = f"{sts_proxy}/api/proxy/oss/sts?bucket={bucket}&service={service}&v={v}"
+        try:
+            response = req.request('GET', proxy_url, headers={
+                'Accept': 'application/json',
+                'Cookie': f'CPL-coros-token={access_token}',
+            })
+            body = json.loads(response.data)
+            credentials = body.get('data', {}).get('credentials')
+            if response.status == 200 and body.get('code') == 200 and credentials:
+                return decode_oss_credentials(credentials)
+            errors.append(f"web-proxy: HTTP {response.status} {body.get('msg') or body}")
+        except Exception as e:
+            errors.append(f"web-proxy: {e}")
+
+    # 通道2: 旧开放接口（2026-10-03 起已下线，大概率 404）
+    legacy_url = f"https://faq.coros.com/openapi/oss/sts?bucket={bucket}&service={service}&app_id={app_id}&sign={sign}&v={v}"
+    try:
+        response = req.request('GET', legacy_url, headers={})
+        if response.status != 200:
+            errors.append(f"legacy: HTTP {response.status}（旧通道已下线）")
+        else:
+            body = json.loads(response.data)
+            credentials = body.get('data', {}).get('credentials')
+            if body.get('code') == 200 and credentials:
+                return decode_oss_credentials(credentials)
+            errors.append(f"legacy: {body}")
+    except Exception as e:
+        errors.append(f"legacy: {e}")
+
+    raise Exception(f"获取OSS STS Token失败（所有通道均不可用）: {' | '.join(errors)}")
 
 
 class OssClient:
     """OSS客户端基类"""
     
-    def __init__(self, bucket, service, app_id, sign, v=2, access_token=None):
+    def __init__(self, bucket, service, app_id, sign, v=2, access_token=None, sts_proxy=None):
         self.bucket = bucket
         self.service = service
         self.app_id = app_id
         self.sign = sign
         self.v = v
         self.access_token = access_token
+        self.sts_proxy = sts_proxy
         self.client = None
         self.credentials = None
     
@@ -111,15 +138,15 @@ try:
     class AliOssClient(OssClient):
         """阿里云OSS客户端"""
         
-        def __init__(self, bucket="coros-oss", service="aliyun", app_id=None, sign=None, v=2, access_token=None):
+        def __init__(self, bucket="coros-oss", service="aliyun", app_id=None, sign=None, v=2, access_token=None, sts_proxy=None):
             app_id = app_id or OSS_APP_ID
             sign = sign or OSS_SIGN['aliyun']
-            super().__init__(bucket, service, app_id, sign, v, access_token)
+            super().__init__(bucket, service, app_id, sign, v, access_token, sts_proxy)
             self.init_client()
         
         def init_client(self):
             self.credentials = get_oss_sts_token(
-                self.bucket, self.service, self.app_id, self.sign, self.v, self.access_token
+                self.bucket, self.service, self.app_id, self.sign, self.v, self.access_token, self.sts_proxy
             )
             auth = oss2.StsAuth(
                 self.credentials["AccessKeyId"],
@@ -166,15 +193,15 @@ try:
     class AwsOssClient(OssClient):
         """AWS S3客户端"""
         
-        def __init__(self, bucket="eu-coros", service="aws", app_id=None, sign=None, v=2, access_token=None):
+        def __init__(self, bucket="eu-coros", service="aws", app_id=None, sign=None, v=2, access_token=None, sts_proxy=None):
             app_id = app_id or OSS_APP_ID
             sign = sign or OSS_SIGN['aws']
-            super().__init__(bucket, service, app_id, sign, v, access_token)
+            super().__init__(bucket, service, app_id, sign, v, access_token, sts_proxy)
             self.init_client()
         
         def init_client(self):
             self.credentials = get_oss_sts_token(
-                self.bucket, self.service, self.app_id, self.sign, self.v, self.access_token
+                self.bucket, self.service, self.app_id, self.sign, self.v, self.access_token, self.sts_proxy
             )
             self.client = boto3.client(
                 "s3",
@@ -205,9 +232,9 @@ except ImportError:
     pass
 
 
-def get_oss_client(bucket, service, app_id=None, sign=None, v=2, access_token=None):
+def get_oss_client(bucket, service, app_id=None, sign=None, v=2, access_token=None, sts_proxy=None):
     """获取OSS客户端实例
-    
+
     Args:
         bucket: 存储桶名称
         service: 服务类型 (aliyun/aws)
@@ -215,18 +242,19 @@ def get_oss_client(bucket, service, app_id=None, sign=None, v=2, access_token=No
         sign: 签名
         v: 版本号
         access_token: 访问令牌
-        
+        sts_proxy: 区域训练中心 BFF 代理地址（STS_CONFIG 的 sts_proxy 字段）
+
     Returns:
         OssClient: OSS客户端实例
     """
     if service == "aliyun":
         try:
-            return AliOssClient(bucket, service, app_id=app_id, sign=sign, v=v, access_token=access_token)
+            return AliOssClient(bucket, service, app_id=app_id, sign=sign, v=v, access_token=access_token, sts_proxy=sts_proxy)
         except NameError:
             raise Exception("未安装oss2库，无法使用阿里云OSS客户端")
     elif service == "aws":
         try:
-            return AwsOssClient(bucket, service, app_id=app_id, sign=sign, v=v, access_token=access_token)
+            return AwsOssClient(bucket, service, app_id=app_id, sign=sign, v=v, access_token=access_token, sts_proxy=sts_proxy)
         except NameError:
             raise Exception("未安装boto3库，无法使用AWS S3客户端")
     else:

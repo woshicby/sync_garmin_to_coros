@@ -359,8 +359,10 @@ def _upload_activities(coros_client, activities_to_upload, garmin_only_count):
             continue
         
         try:
-            bucket = STS_CONFIG.get(region_id, STS_CONFIG[2])['bucket']
-            service = STS_CONFIG.get(region_id, STS_CONFIG[2])['service']
+            sts_cfg = STS_CONFIG.get(region_id, STS_CONFIG[2])
+            bucket = sts_cfg['bucket']
+            service = sts_cfg['service']
+            sts_proxy = sts_cfg.get('sts_proxy')
             serviceName = 'oss' if service == 'aliyun' else 's3'
             
             temp_zip_path = tempfile.mktemp(suffix='.zip')
@@ -371,7 +373,7 @@ def _upload_activities(coros_client, activities_to_upload, garmin_only_count):
                 zip_size = os.path.getsize(temp_zip_path)
                 file_md5 = calculate_md5_file(temp_zip_path)
 
-                oss_client = get_oss_client(bucket, service, access_token=coros_client.access_token)
+                oss_client = get_oss_client(bucket, service, access_token=coros_client.access_token, sts_proxy=sts_proxy)
                 
                 zip_filename = f"{user_id}/{file_md5}.zip"
                 

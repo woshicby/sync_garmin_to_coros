@@ -81,8 +81,10 @@ def _upload_to_coros(coros_client, file_path, filename):
     user_id = coros_client.user_id
     region_id = coros_client.region_id
 
-    bucket = STS_CONFIG.get(region_id, STS_CONFIG[2])['bucket']
-    service = STS_CONFIG.get(region_id, STS_CONFIG[2])['service']
+    sts_cfg = STS_CONFIG.get(region_id, STS_CONFIG[2])
+    bucket = sts_cfg['bucket']
+    service = sts_cfg['service']
+    sts_proxy = sts_cfg.get('sts_proxy')
 
     temp_zip_path = None
     try:
@@ -94,7 +96,7 @@ def _upload_to_coros(coros_client, file_path, filename):
         zip_size = os.path.getsize(temp_zip_path)
         file_md5 = calculate_md5_file(temp_zip_path)
 
-        oss_client = get_oss_client(bucket, service, access_token=coros_client.access_token)
+        oss_client = get_oss_client(bucket, service, access_token=coros_client.access_token, sts_proxy=sts_proxy)
         zip_filename = f"{user_id}/{file_md5}.zip"
         oss_client.multipart_upload(temp_zip_path, zip_filename)
 

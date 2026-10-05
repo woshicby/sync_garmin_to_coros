@@ -37,10 +37,12 @@ REGION_CONFIG = {
     3: {"teamapi": "https://teameuapi.coros.com"},
 }
 
+# sts_proxy: 训练中心网页版 BFF 代理, 2026-10-03 起获取 STS 凭证须经此通道
+# (旧开放接口 faq.coros.com/openapi/oss/sts 已下线, 返回 404)
 STS_CONFIG = {
-    1: {'bucket': 'coros-s3', 'service': 'aws'},
-    2: {'bucket': 'coros-oss', 'service': 'aliyun'},
-    3: {'bucket': 'eu-coros', 'service': 'aws'},
+    1: {'bucket': 'coros-s3', 'service': 'aws', 'sts_proxy': 'https://training.coros.com'},
+    2: {'bucket': 'coros-oss', 'service': 'aliyun', 'sts_proxy': 'https://trainingcn.coros.com'},
+    3: {'bucket': 'eu-coros', 'service': 'aws', 'sts_proxy': 'https://training.coros.com'},
 }
 
 SPORT_TYPE_MAPPING = {
